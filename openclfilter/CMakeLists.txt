@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.4.1)
+message(STATUS $ENV{CMAKE_CURRENT_LIST_DIR})
+include_directories(src/main/cpp/include/)
+add_library(openclfilter SHARED src/main/cpp/test.cpp)
+target_link_libraries(openclfilter log)
