@@ -1,21 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <jni.h>
 
-#include <CL/cl2.hpp>
+#define CL_USE_DEPRECATED_OPENCL_1_2_APIS
+extern "C" {
+    #include <CL/cl.h>
+}
 
 #define MAX_SOURCE_SIZE (0x100000)
 
-int main(void) {
-    // Create the two input vectors
-    int i;
-    const int LIST_SIZE = 1024;
-    int *A = (int*)malloc(sizeof(int)*LIST_SIZE);
-    int *B = (int*)malloc(sizeof(int)*LIST_SIZE);
-    for(i = 0; i < LIST_SIZE; i++) {
-        A[i] = i;
-        B[i] = LIST_SIZE - i;
-    }
-
+jint* vector_addition(jint A[], jint B[], int LIST_SIZE) {
     // Load the kernel source code into the array source_str
     FILE *fp;
     char *source_str;
@@ -47,17 +41,17 @@ int main(void) {
 
     // Create memory buffers on the device for each vector
     cl_mem a_mem_obj = clCreateBuffer(context, CL_MEM_READ_ONLY,
-                                      LIST_SIZE * sizeof(int), NULL, &ret);
+                                      LIST_SIZE * sizeof(jint), NULL, &ret);
     cl_mem b_mem_obj = clCreateBuffer(context, CL_MEM_READ_ONLY,
-                                      LIST_SIZE * sizeof(int), NULL, &ret);
+                                      LIST_SIZE * sizeof(jint), NULL, &ret);
     cl_mem c_mem_obj = clCreateBuffer(context, CL_MEM_WRITE_ONLY,
-                                      LIST_SIZE * sizeof(int), NULL, &ret);
+                                      LIST_SIZE * sizeof(jint), NULL, &ret);
 
     // Copy the lists A and B to their respective memory buffers
     ret = clEnqueueWriteBuffer(command_queue, a_mem_obj, CL_TRUE, 0,
-                               LIST_SIZE * sizeof(int), A, 0, NULL, NULL);
+                               LIST_SIZE * sizeof(jint), A, 0, NULL, NULL);
     ret = clEnqueueWriteBuffer(command_queue, b_mem_obj, CL_TRUE, 0,
-                               LIST_SIZE * sizeof(int), B, 0, NULL, NULL);
+                               LIST_SIZE * sizeof(jint), B, 0, NULL, NULL);
 
     // Create a program from the kernel source
     cl_program program = clCreateProgramWithSource(context, 1,
@@ -81,12 +75,12 @@ int main(void) {
                                  &global_item_size, &local_item_size, 0, NULL, NULL);
 
     // Read the memory buffer C on the device to the local variable C
-    int *C = (int*)malloc(sizeof(int)*LIST_SIZE);
+    jint *C = (jint*)malloc(sizeof(jint)*LIST_SIZE);
     ret = clEnqueueReadBuffer(command_queue, c_mem_obj, CL_TRUE, 0,
-                              LIST_SIZE * sizeof(int), C, 0, NULL, NULL);
+                              LIST_SIZE * sizeof(jint), C, 0, NULL, NULL);
 
     // Display the result to the screen
-    for(i = 0; i < LIST_SIZE; i++)
+    for(int i = 0; i < LIST_SIZE; i++)
         printf("%d + %d = %d\n", A[i], B[i], C[i]);
 
     // Clean up
@@ -101,6 +95,25 @@ int main(void) {
     ret = clReleaseContext(context);
     free(A);
     free(B);
+    return C;
+}
+
+extern "C"
+JNIEXPORT jintArray JNICALL Java_project_timweri_openclfilter_OpenCLFilter_vector_1addition(
+        JNIEnv *env,
+        jobject this_obj,
+        jintArray A_inp,
+        jintArray B_inp,
+        jint LIST_SIZE
+) {
+    jboolean *isCopy;
+    jint *A = env->GetIntArrayElements(A_inp, isCopy);
+    jint *B = env->GetIntArrayElements(B_inp, isCopy);
+    jint *C = vector_addition(A, B, LIST_SIZE);
+    env->ReleaseIntArrayElements(A_inp, A, JNI_ABORT);
+    env->ReleaseIntArrayElements(B_inp, B, JNI_ABORT);
+    jintArray C_out = env->NewIntArray(LIST_SIZE);
+    env->SetIntArrayRegion(C_out, 0, LIST_SIZE, C);
     free(C);
-    return 0;
+    return C_out;
 }
